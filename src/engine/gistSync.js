@@ -7,9 +7,13 @@ export async function fetchGist(gistId, pat) {
   const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers })
   if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`)
   const json = await res.json()
-  const raw = json.files?.[FILE]?.content
-  if (!raw) throw new Error(`File "${FILE}" not found in the Gist. Make sure you created it with that exact filename.`)
-  try { return JSON.parse(raw) } catch { return EMPTY }
+
+  // Try exact filename first, then any .json file in the Gist
+  const fileEntry = json.files?.[FILE]
+    || Object.values(json.files || {}).find(f => f.filename?.endsWith('.json'))
+
+  if (!fileEntry?.content) return EMPTY   // no file yet — first-time setup, start empty
+  try { return JSON.parse(fileEntry.content) } catch { return EMPTY }
 }
 
 export async function patchGist(gistId, pat, data) {
