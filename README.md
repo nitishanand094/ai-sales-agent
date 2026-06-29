@@ -1,6 +1,6 @@
-# CanaraHSBC AI Sales Agent
+# AI Sales Agent
 
-An AI-powered advisor portal for insurance and financial product sales. Built for Canara HSBC Life Insurance sales teams to profile clients, generate product recommendations, and compare policies — all in the browser with no backend.
+An AI-powered advisor portal for insurance and financial product sales. Profile clients, generate product recommendations, and compare policies — all in the browser with no backend.
 
 **Live app:** https://nitishanand094.github.io/ai-sales-agent/
 
