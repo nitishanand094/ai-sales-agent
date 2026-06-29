@@ -5,56 +5,54 @@
 A single-page web app for life-insurance sales advisors. It runs entirely in the browser (React + Vite) with **no application backend**. It provides:
 
 - An **AI Sales Agent dashboard** whose metrics are computed from real usage data (not mock numbers).
-- A **client profiler** that produces AI-matched product recommendations.
+- A **client profiler** that produces AI-matched product recommendations and saves client profiles.
 - **Approximate premium estimates** and side-by-side **policy comparison**.
-- A **search history** of past client profiles.
+- A **recommendation history** and **saved clients** list, both shared across devices via a GitHub Gist.
 
-Product data is **not hardcoded** — it is fetched at runtime from a JSON feed, which is produced by a live scraper of the insurer's public site (or, alternatively, a CMS/Google-Sheet export). Global state is managed with **Redux Toolkit**.
+Product data is **not hardcoded** — it is fetched at runtime from a JSON feed produced by a Node ingestion script. Global state is managed with **Redux Toolkit**.
 
 ---
 
 ## Overall Architecture
 
 ```
-┌──────────────────────────── Browser (SPA) ────────────────────────────┐
-│                                                                        │
-│   React components                                                     │
-│   Sidebar · MobileNav · Dashboard · Profiler · Recommendations · …     │
-│        │  useSelector / useDispatch                                    │
-│        ▼                                                               │
-│   ┌──────────────────────── Redux store ────────────────────────┐     │
-│   │   ui          client         plans           history         │     │
-│   │  (page,      (current      (catalogue +    (search history,   │     │
-│   │   toasts)     profile)      async load)     persisted)        │     │
-│   └──────────────────────────────────────────────────────────────┘    │
-│        │                    │                 │                        │
-│        ▼                    ▼                 ▼                        │
-│   match engine /       plans feed        localStorage                  │
-│   premium estimator    (loaded once)     • ch_advisor_history          │
-│   (pure functions,     at startup        • ch_plans_cache (1h TTL)     │
-│    read store)                                                         │
-└────────────────────────────────│──────────────────────────────────────┘
-                                  │  fetch(VITE_PLANS_URL, default /plans.json)
-                                  ▼
-                         public/plans.json   ◄── written, server-side (Node), by:
-                                  ▲                • npm run scrape  → live insurer site
-                                  │                • npm run sync    → CMS / Google-Sheet CSV
-                                  │                • npm run feed    → bundled catalogue
-                    canarahsbclife.com (scraped with --use-system-ca)
+┌──────────────────────────── Browser (SPA) ─────────────────────────────┐
+│                                                                          │
+│   React components                                                       │
+│   Sidebar · MobileNav · SyncSettings · Dashboard · Profiler · …         │
+│        │  useSelector / useDispatch                                      │
+│        ▼                                                                 │
+│   ┌─────────────────────────── Redux store ──────────────────────────┐  │
+│   │  ui      client    plans      history    savedClients    sync     │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│        │                    │            │           │                   │
+│        ▼                    ▼            ▼           ▼                   │
+│   match engine /       plans feed   localStorage  GitHub Gist            │
+│   premium estimator    (loaded once) ch_advisor_  (shared JSON store,    │
+│   (pure functions)     at startup    history       auto-sync on load     │
+│                                      ch_saved_     and data change)      │
+│                                      clients                             │
+│                                      ch_sync_                            │
+│                                      config                              │
+└──────────────────────────────────────────────────────────────────────────┘
+                │  fetch(/plans.json)          │  GitHub API (PATCH /gists)
+                ▼                             ▼
+         public/plans.json            gist.github.com
+         (written by npm run feed)    sales-agent-data.json
 ```
 
 **Layers**
 
 1. **View** — React function components. No prop-drilling of shared state; they read/write the store via hooks.
-2. **State** — a single Redux store with four slices (`ui`, `client`, `plans`, `history`).
-3. **Domain logic** — pure modules: the match engine (scoring) and the premium estimator. They read plan data from the store and take the client profile as input.
-4. **Data** — plans are fetched at runtime from `public/plans.json`; the bundled `src/data/plans.js` is only a fallback. History and the plan cache live in `localStorage`.
-5. **Ingestion (offline / server-side)** — Node scripts that write the feed: a live scraper, a CMS/Sheet sync, and a bundled-catalogue generator. These run outside the browser (cron / manual), not as part of the app.
+2. **State** — a single Redux store with six slices (`ui`, `client`, `plans`, `history`, `savedClients`, `sync`).
+3. **Domain logic** — pure modules: the match engine (scoring), the premium estimator, and the Gist sync engine. They read plan data from the store and take the client profile as input.
+4. **Data** — plans are fetched at runtime from `public/plans.json`. History, saved clients, and sync config live in `localStorage`. All three are mirrored to a shared GitHub Gist.
+5. **Ingestion (offline / server-side)** — Node scripts that write the feed. These run outside the browser, not as part of the app.
 
 **Key data flows**
 
-- *Startup:* `App` dispatches `loadPlans()` → thunk reads cache → else fetches the feed → else falls back to bundled → store populated → components render.
-- *Profiling:* Profiler form → `setClient` + `addEntry(history)` → match engine ranks plans for that profile → Recommendations render scored cards; history persists to `localStorage`.
+- *Startup:* `App` dispatches `loadPlans()` and `loadFromGist()` in parallel. Plans populate from feed/cache/fallback; history and saved clients merge in from the Gist (read-only if no PAT configured).
+- *Profiling:* Profiler form → `setClient` + `addEntry(history)` + `upsertClient(savedClients)` → match engine ranks plans → Recommendations render scored cards. A 2.5s debounced subscriber pushes changes to the Gist automatically.
 - *Dashboard:* reads `history` from the store → analytics functions compute KPIs, insights and next actions live.
 
 ---
@@ -67,7 +65,7 @@ Product data is **not hardcoded** — it is fetched at runtime from a JSON feed,
 | **React** | 18.3 | UI component framework |
 | **Redux Toolkit** | 2.x | Global state (store, slices, async thunks, selectors) |
 | **react-redux** | 9.x | React bindings (`Provider`, `useSelector`, `useDispatch`) |
-| **Vite** | 5.4 | Dev server + build tool |
+| **Vite** | 5.4 | Dev server + build tool (base: `/ai-sales-agent/` for GitHub Pages) |
 | **JavaScript (ESM)** | ES2022 | Language (no TypeScript) |
 
 ### Styling
@@ -77,13 +75,13 @@ Product data is **not hardcoded** — it is fetched at runtime from a JSON feed,
 | **CSS Custom Properties** | Brand tokens: colours, spacing, shadows |
 | **IBM Plex Sans** (Google Fonts) | Primary typeface |
 
-**Design direction:** a restrained, enterprise look — minimal iconography (clean line-style SVG icons in the left nav only; no emojis or decorative glyphs elsewhere). The palette is **CanaraHSBC-inspired blue**, defined as CSS variables in `:root`:
+**Design direction:** a restrained, enterprise look — minimal iconography (clean line-style SVG icons in the left nav only). The palette is defined as CSS variables in `:root`:
 
 | Token | Value | Use |
 |---|---|---|
-| `--primary` | `#0067B1` | Deep brand blue — primary buttons, active states, table headers |
-| `--primary-light` | `#00ADEF` | Signature bright blue — accents, active nav indicator |
-| `--primary-muted` | `#E6F4FC` | Light blue tint — surfaces, chips |
+| `--primary` | `#00ADEF` | Bright cyan — primary buttons, active states, CTA |
+| `--primary-dark` | `#0090C8` | Darker cyan — hover states |
+| `--primary-light` | `#0067B1` | Deep blue — accents, active nav indicator |
 | `--navy` | `#0A2540` | Sidebar / dark headers |
 | `--accent` | `#1A6B3C` | Green — success, match scores |
 | `--danger` | `#C62828` | Red — destructive actions, low-score indicator |
@@ -94,24 +92,50 @@ Product data is **not hardcoded** — it is fetched at runtime from a JSON feed,
 |---|---|
 | **`@vitejs/plugin-react`** | JSX transform + Fast Refresh |
 | **ESLint** | Linting (react-hooks, react-refresh) |
-| **Node `fetch` + `--use-system-ca`** | Server-side scraping/sync scripts (trusts the corporate proxy CA) |
+| **GitHub Actions** | CI/CD — builds and deploys to GitHub Pages on push to `main` |
 | **npm** | Package manager + script runner |
 
 ---
 
 ## State Management (Redux Toolkit)
 
-The store is created in `src/store/index.js` and provided at the root in `src/main.jsx` via `<Provider>`. Four slices:
+The store is created in `src/store/index.js` and provided at the root in `src/main.jsx` via `<Provider>`. Six slices:
 
 | Slice | File | State | Actions / thunks |
 |---|---|---|---|
-| **ui** | `uiSlice.js` | `page`, `toasts` | `setPage`, `addToast`, `removeToast`, `notify` (thunk — shows a toast and auto-dismisses after 3.5s) |
+| **ui** | `uiSlice.js` | `page`, `toasts` | `setPage`, `addToast`, `removeToast`, `notify` |
 | **client** | `clientSlice.js` | `current` (active profile) | `setClient`, `clearClient` |
-| **plans** | `plansSlice.js` | `items`, `meta`, `status` | `loadPlans` (async thunk); selectors `selectPlans`, `selectPlansMeta`, `selectPlanTypes` (memoised) |
-| **history** | `historySlice.js` | `items` | `addEntry`, `deleteEntry`, `clearAll` |
+| **plans** | `plansSlice.js` | `items`, `meta`, `status` | `loadPlans` (async thunk); memoised selectors |
+| **history** | `historySlice.js` | `items` | `addEntry`, `deleteEntry`, `clearAll`, `setHistoryItems` |
+| **savedClients** | `savedClientsSlice.js` | `items` | `upsertClient` (insert or update by name), `deleteClient`, `clearSavedClients`, `setSavedClientItems` |
+| **sync** | `syncSlice.js` | `gistId`, `pat`, `status`, `lastSync`, `errorMsg` | `setSyncConfig`, `clearSyncConfig`, `loadFromGist`, `pushToGist` |
 
-- **Persistence:** a `store.subscribe` in `store/index.js` writes the `history` slice to `localStorage` (`ch_advisor_history`) whenever it changes.
-- **Non-React access:** the match engine reads plans via `store.getState().plans.items`, so pure logic can score without hooks.
+**Persistence** — a `store.subscribe` in `store/index.js` writes three keys to `localStorage`:
+- `ch_advisor_history` — recommendation history items
+- `ch_saved_clients` — saved client profiles
+- `ch_sync_config` — Gist ID and PAT for the owner's device
+
+A **debounced push subscriber** (2.5s delay) calls `pushToGist()` whenever history or savedClients change, but only if a PAT is configured.
+
+---
+
+## Cloud Sync (GitHub Gist)
+
+All visitors auto-load shared data from a hardcoded Gist ID (`src/config.js`) on every page open — no credentials needed for reads. The Gist stores:
+
+```json
+{ "history": [...], "savedClients": [...] }
+```
+
+### Sync engine (`src/engine/gistSync.js`)
+- `fetchGist(gistId, pat?)` — reads from the GitHub Gist API. PAT is optional; unauthenticated reads work for both public and secret Gists when the ID is known.
+- `patchGist(gistId, pat, data)` — writes via `PATCH /gists/{id}`. Requires a PAT with `gist` scope.
+
+### Sync thunks (`src/store/syncSlice.js`)
+- `loadFromGist` — fetches Gist data, merges with local items by ID (Gist items are canonical), dispatches to `history` and `savedClients` slices. Writes merged result back only if PAT is present.
+- `pushToGist` — pushes current history + savedClients to Gist. No-op if PAT is absent.
+
+**Merge strategy:** union by `id`. Gist items take precedence on conflict; local-only items are appended. Prevents data loss when multiple sessions write concurrently.
 
 ---
 
@@ -120,50 +144,48 @@ The store is created in `src/store/index.js` and provided at the root in `src/ma
 ### Runtime feed
 - The app fetches the catalogue from `VITE_PLANS_URL` (default `/plans.json`) on startup via the `loadPlans` thunk.
 - Resolution order: **fresh `localStorage` cache** (`ch_plans_cache`, 1-hour TTL) → **live feed** → **bundled fallback** (`src/data/plans.js`).
-- `meta.source` records which was used (`live` / `cache` / `bundled`) and is shown on the dashboard.
 
-### Ingestion scripts (`scripts/`, run with Node, not in the browser)
+### Ingestion scripts (`scripts/`, run with Node)
 | Script | npm command | What it does |
 |---|---|---|
-| `scrape-live.mjs` | `npm run scrape` | Scrapes the insurer's public site, keeps only real products (those carrying an IRDAI **UIN**), strips insurer branding from copy, captures any published minimum premium, and writes `public/plans.json`. |
-| `scrape-loop.mjs` | `npm run scrape:watch` | Runs the scrape now and re-runs every `REFRESH_HOURS` (default 12) while open. |
-| `sync-feed.mjs` | `npm run sync` | Builds the feed from a CMS endpoint or a published Google-Sheet **CSV** (or a local `plans-source.csv`). |
-| `export-template.mjs` | `npm run feed:template` | Exports the current catalogue to `plans-source.csv` for editing in a sheet. |
-| `build-plans-feed.mjs` | `npm run feed` | Writes the bundled catalogue out as `public/plans.json` (offline demo). |
-
-> The scraper runs server-side because the site blocks bots, has no public API, returns quote-based premiums, and (on a corporate network) sits behind a TLS-intercepting proxy — handled with Node's `--use-system-ca`.
-
-### `.env`
-- `VITE_PLANS_URL` — where the app fetches the catalogue (default `/plans.json`).
-- `FEED_SOURCE_URL` — source for `npm run sync` (Google-Sheet CSV / CMS URL). Blank → uses local `plans-source.csv`.
+| `build-plans-feed.mjs` | `npm run feed` | Writes the bundled catalogue as `public/plans.json` |
+| `scrape-live.mjs` | `npm run scrape` | Scrapes the insurer's public site, keeps only IRDAI UIN-bearing products |
+| `scrape-loop.mjs` | `npm run scrape:watch` | Recurring scrape (every `REFRESH_HOURS`, default 12) |
+| `sync-feed.mjs` | `npm run sync` | Builds feed from a CMS endpoint or Google-Sheet CSV |
+| `export-template.mjs` | `npm run feed:template` | Exports catalogue to `plans-source.csv` |
 
 ---
 
-## Domain Logic (pure modules)
+## Domain Logic
 
 ### `src/engine/matchEngine.js`
-Deterministic AI matching. `scorePlan(profile, plan)` blends goal fit (35), risk fit (25), age eligibility (15), budget fit (15) and coverage fit (10) with a small product-quality nudge. Exposes `rankPlans`, `clientScore`, and `buildReasoning` (human-readable explanation generated from the profile). Reads plans from the store.
+Deterministic AI matching. `scorePlan(profile, plan)` blends goal fit (35), risk fit (25), age eligibility (15), budget fit (15) and coverage fit (10) with a product-quality nudge. Exposes `rankPlans`, `clientScore`, and `buildReasoning`.
 
 ### `src/engine/premiumEstimator.js`
-`estimatePremium(plan, profile?)` produces an **indicative** annual premium using the standard industry method (rate per ₹1,000 of sum assured, adjusted for age/term, by product type). Catalogue view uses a 30-year-old default; inside Recommendations it uses the client's actual age/cover/term. `PREMIUM_METHODOLOGY` is the user-facing explanation. Not a quote — the insurer's real rates are proprietary.
+`estimatePremium(plan, profile?)` produces an indicative annual premium (rate per ₹1,000 of sum assured, adjusted for age/term, by product type). Not a quote — insurer rates are proprietary.
+
+### `src/engine/gistSync.js`
+`fetchGist` and `patchGist` — thin wrappers over the GitHub Gist REST API. Used by the sync slice thunks.
 
 ### `src/store/clientStore.js`
-Pure analytics over the history array: `getDashboardStats`, `getGoalDistribution`, `getAIInsights`, `getNextActions`. The dashboard passes in the Redux `history` and renders the results.
+Pure analytics over the history array: `getDashboardStats`, `getGoalDistribution`, `getAIInsights`, `getNextActions`. Consumed by the Dashboard page.
 
 ---
 
 ## Components & Pages
 
 ### Components (`src/components/`)
-- **Sidebar / MobileNav** — navigation; read `page`, dispatch `setPage`.
-- **PlanDetailModal** — full plan detail overlay (esc/backdrop close, scroll lock, approx premium, highlights, details grid).
+- **Sidebar** — navigation + sync status dot; shows "Sync Settings" button only when sync is not yet configured; collapses to a dot indicator once active.
+- **MobileNav** — bottom nav bar for ≤768px viewports.
+- **SyncSettings** — modal for entering Gist ID + PAT, testing connection, and disconnecting. Includes a collapsible first-time setup guide.
+- **PlanDetailModal** — full plan detail overlay.
 - **ProgressBar / Slider / Toast** — small presentational helpers.
 
 ### Pages (`src/pages/`)
-- **Dashboard** — AI Sales Agent console: live KPIs, AI insights, recommended next actions, goal distribution and recent activity, all computed from `history`. Shows an onboarding empty state when there's no data.
-- **Profiler** — three tabs: **Profile Builder** (3-step intake), **Recommendations** (scored cards + approx premiums + AI reasoning; empty state prompts profile creation), **Search History** (table with restore/delete).
-- **Recommendations** — standalone product catalogue with filter/sort, approx premiums and a "how premiums are calculated" note.
-- **Comparison** — 2–4 plan side-by-side table with best-value highlighting, approx premiums, and an Advisor's Verdict panel.
+- **Dashboard** — live KPIs, AI insights, recommended next actions, goal distribution and recent activity computed from `history`. Onboarding empty state when no data.
+- **Profiler** — four tabs: **Profile Builder** (3-step intake), **Recommendations** (scored cards + AI reasoning), **Saved Clients** (persistent profiles with load/edit/delete), **Recommendation History**.
+- **Recommendations** — standalone product catalogue with filter/sort and approx premiums.
+- **Comparison** — 2–4 plan side-by-side table with best-value highlighting, approx premiums, and Advisor's Verdict. PDF download via `window.print()`.
 
 ---
 
@@ -173,17 +195,17 @@ Pure analytics over the history array: `getDashboardStats`, `getGoalDistribution
 
 ---
 
-## Build & Run
+## Build & Deploy
 
 ```bash
 npm install          # install dependencies
+npm run feed         # generate public/plans.json
 npm run dev          # dev server (http://localhost:5173)
 npm run build        # production build → dist/
 npm run preview      # preview the production build
-
-# Data feed
-npm run scrape       # refresh public/plans.json from the live site
-npm run scrape:watch # recurring local refresh (every REFRESH_HOURS)
-npm run sync         # refresh from a CMS / Google-Sheet CSV
-npm run feed         # write the bundled catalogue out as the feed
 ```
+
+Deployment is fully automated — pushing to `main` triggers `.github/workflows/deploy.yml`:
+1. `npm ci` → `npm run feed` → `npm run build`
+2. Upload `dist/` as a GitHub Pages artifact
+3. Deploy to `https://nitishanand094.github.io/ai-sales-agent/`
