@@ -47,8 +47,15 @@ export default function Sidebar() {
     <>
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-org">Advisor Portal</div>
-          <div className="sidebar-brand">AI Sales Agent</div>
+          <svg className="sidebar-logo-icon" viewBox="0 0 24 24" width="32" height="32" fill="none"
+            stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V7L12 2z" />
+            <polyline points="9 12 11 14 15 10" />
+          </svg>
+          <div>
+            <div className="sidebar-org">Advisor Portal</div>
+            <div className="sidebar-brand">AI Sales Agent</div>
+          </div>
         </div>
         <nav className="sidebar-nav">
           <div className="nav-group-label">Navigation</div>

@@ -55,8 +55,14 @@ input, select, textarea { font-family: inherit; }
   border-right: 1px solid rgba(255,255,255,0.06);
 }
 .sidebar-logo {
-  padding: 26px 22px 22px;
+  padding: 20px 22px 18px;
   border-bottom: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; gap: 12px;
+}
+.sidebar-logo-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  opacity: 0.92;
 }
 .sidebar-org {
   font-size: 11px;
