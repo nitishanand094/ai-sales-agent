@@ -7,6 +7,7 @@ import { selectPlanTypes } from '../store/plansSlice'
 import { setPage, notify } from '../store/uiSlice'
 import { setClient } from '../store/clientSlice'
 import { addEntry, deleteEntry } from '../store/historySlice'
+import { upsertClient, deleteClient } from '../store/savedClientsSlice'
 import { rankPlans, clientScore, buildReasoning, planReason } from '../engine/matchEngine'
 import { estimatePremium, PREMIUM_METHODOLOGY } from '../engine/premiumEstimator'
 
@@ -192,6 +193,59 @@ function RecommendationsTab({ client, addToast, onGoToBuilder, planTypes }) {
   )
 }
 
+function SavedClientsTab({ savedClients, onLoadAndGenerate, onEdit, onDelete }) {
+  if (savedClients.length === 0) {
+    return (
+      <div className="rec-empty-wrap">
+        <div className="rec-empty-title">No Saved Clients Yet</div>
+        <p className="rec-empty-desc">
+          Fill the Profile Builder and click <strong>Save Client</strong> to store a client here.
+          Saved clients persist across sessions and can be reloaded or re-analysed in one click.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 16 }}>
+        {savedClients.length} saved client{savedClients.length !== 1 ? 's' : ''}
+      </div>
+      <div className="product-grid">
+        {savedClients.map(c => (
+          <div key={c.id} className="product-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+              <span className="product-type type-term" style={{ fontSize: 12 }}>{c.name}</span>
+              <span className="activity-goal" style={{ marginLeft: 0 }}>{c.profile.goal}</span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--fg)', marginBottom: 4 }}>
+              Age {c.profile.age} · {c.profile.gender}{c.profile.city ? ` · ${c.profile.city}` : ''}
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <span className={`risk-chip risk-${c.profile.risk.toLowerCase()}`}>{c.profile.risk} Risk</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+              {c.profile.income} income · {c.profile.dependents} dependent{c.profile.dependents !== 1 ? 's' : ''}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 16 }}>
+              Saved {fmtDate(c.savedAt)}
+            </div>
+            <div className="product-actions">
+              <button className="btn btn-sm btn-primary" onClick={() => onLoadAndGenerate(c.profile)}>
+                Load &amp; Generate
+              </button>
+              <button className="btn btn-sm btn-outline" onClick={() => onEdit(c.profile)}>
+                Edit
+              </button>
+              <button className="btn btn-sm hist-del-btn" onClick={() => onDelete(c.id)}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function HistoryTab({ history, onDelete, onRestoreProfile }) {
   const [openId, setOpenId] = useState(null)
   const handleDelete = id => onDelete(id)
@@ -290,6 +344,7 @@ export default function Profiler() {
   const dispatch = useDispatch()
   const client = useSelector(s => s.client.current)
   const history = useSelector(s => s.history.items)
+  const savedClientsList = useSelector(s => s.savedClients.items)
   const planTypes = useSelector(selectPlanTypes)
   const addToast = (msg, type) => dispatch(notify(msg, type))
 
@@ -310,8 +365,42 @@ export default function Profiler() {
     }))
     dispatch(setClient(f))
     dispatch(addEntry(f, topPlan?.shortName || topPlan?.name || 'N/A', clientScore(f), recs))
+    dispatch(upsertClient(f))
     addToast(`Profile saved for ${f.name || 'client'}. Recommendations ready.`, 'success')
     setTab('recommendations')
+  }
+
+  const handleSaveClient = () => {
+    dispatch(upsertClient(f))
+    addToast(`${f.name || 'Client'} saved.`, 'success')
+  }
+
+  const handleLoadAndGenerate = profile => {
+    const ranked = rankPlans(profile)
+    const topPlan = ranked[0]
+    const recs = ranked.slice(0, 5).map(p => ({
+      name: p.shortName || p.name,
+      type: p.type,
+      aiMatch: p.aiMatch,
+      reason: planReason(profile, p),
+    }))
+    dispatch(setClient(profile))
+    dispatch(addEntry(profile, topPlan?.shortName || topPlan?.name || 'N/A', clientScore(profile), recs))
+    setF(profile)
+    addToast(`Recommendations generated for ${profile.name || 'client'}.`, 'success')
+    setTab('recommendations')
+  }
+
+  const handleEditSaved = profile => {
+    setF(profile)
+    setStep(1)
+    setTab('builder')
+    addToast(`Profile loaded for ${profile.name || 'client'}.`, 'info')
+  }
+
+  const handleDeleteSaved = id => {
+    dispatch(deleteClient(id))
+    addToast('Saved client removed.', 'info')
   }
 
   const handleRestore = profile => {
@@ -324,12 +413,13 @@ export default function Profiler() {
 
   const handleDelete = id => {
     dispatch(deleteEntry(id))
-    addToast('Search record removed.', 'info')
+    addToast('Record removed.', 'info')
   }
 
   const TABS = [
     { id: 'builder', label: 'Profile Builder', badge: null },
     { id: 'recommendations', label: 'Recommendations', badge: client ? <span className="tab-dot-green" /> : <span className="tab-dot-grey" /> },
+    { id: 'saved', label: 'Saved Clients', badge: savedClientsList.length > 0 ? <span className="tab-badge">{savedClientsList.length}</span> : null },
     { id: 'history', label: 'Recommendation History', badge: history.length > 0 ? <span className="tab-badge">{history.length}</span> : null },
   ]
 
@@ -486,9 +576,12 @@ export default function Profiler() {
                 </div>
                 <div className="form-actions spread">
                   <button className="btn btn-outline" onClick={() => setStep(2)}>Back</button>
-                  <button className="btn btn-primary btn-lg" onClick={handleGenerateRecs}>
-                    Generate Recommendations
-                  </button>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button className="btn btn-outline" onClick={handleSaveClient}>Save Client</button>
+                    <button className="btn btn-primary btn-lg" onClick={handleGenerateRecs}>
+                      Generate Recommendations
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -508,6 +601,15 @@ export default function Profiler() {
           addToast={addToast}
           onGoToBuilder={() => setTab('builder')}
           planTypes={planTypes}
+        />
+      )}
+
+      {tab === 'saved' && (
+        <SavedClientsTab
+          savedClients={savedClientsList}
+          onLoadAndGenerate={handleLoadAndGenerate}
+          onEdit={handleEditSaved}
+          onDelete={handleDeleteSaved}
         />
       )}
 
