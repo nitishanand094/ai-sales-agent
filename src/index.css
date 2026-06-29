@@ -831,31 +831,55 @@ input, select, textarea { font-family: inherit; }
 .form-actions.spread { justify-content: space-between; }
 
 .mobile-nav {
-  display: none; position: fixed; bottom: 0; left: 0; right: 0;
-  background: var(--card); border-top: 1px solid var(--border);
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #0A2540;
+  box-shadow: 0 -1px 0 rgba(255,255,255,0.06), 0 -8px 24px rgba(10,37,64,0.35);
   z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  flex-direction: row;
 }
-.mobile-nav-inner { display: flex; height: 58px; }
 .mnav-btn {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 2px;
-  background: none; border: none; cursor: pointer; position: relative;
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 5px;
+  padding: 10px 4px 11px;
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.42);
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
-.mnav-btn.active { color: var(--primary); }
-.mnav-btn.active::before {
-  content: ''; position: absolute;
+.mnav-btn:active { opacity: 0.7; }
+.mnav-btn.active {
+  color: #00ADEF;
+}
+.mnav-btn.active::after {
+  content: '';
+  position: absolute;
   top: 0; left: 20%; right: 20%;
-  height: 2px; background: var(--primary);
-  border-radius: 0 0 2px 2px;
+  height: 2.5px;
+  background: #00ADEF;
+  border-radius: 0 0 3px 3px;
 }
-.mnav-icon { font-size: 17px; }
-.mnav-label { font-size: 10px; font-weight: 500; color: var(--muted); }
-.mnav-btn.active .mnav-label { color: var(--primary); font-weight: 600; }
+.mnav-icon {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.mnav-icon svg { width: 24px; height: 24px; display: block; }
+.mnav-label {
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: inherit;
+}
 
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .main-content { margin-left: 0; padding-bottom: 66px; }
-  .mobile-nav { display: block; }
+  .main-content { margin-left: 0; padding-bottom: 72px; }
+  .mobile-nav { display: flex; }
   .page { padding: 18px 14px; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .product-grid { grid-template-columns: 1fr; }
