@@ -24,8 +24,9 @@ const historySlice = createSlice({
       state.items = state.items.filter(e => e.id !== action.payload)
     },
     clearAll: (state) => { state.items = [] },
+    setItems: (state, action) => { state.items = action.payload },
   },
 })
 
-export const { addEntry, deleteEntry, clearAll } = historySlice.actions
+export const { addEntry, deleteEntry, clearAll, setItems: setHistoryItems } = historySlice.actions
 export default historySlice.reducer

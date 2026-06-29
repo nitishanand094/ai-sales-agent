@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { loadPlans } from './store/plansSlice'
+import { loadFromGist } from './store/syncSlice'
 import Sidebar from './components/Sidebar'
 import MobileNav from './components/MobileNav'
 import Dashboard from './pages/Dashboard'
@@ -31,8 +32,13 @@ export default function App() {
   const toasts = useSelector(s => s.ui.toasts)
   const plansReady = useSelector(s => s.plans.status)
 
-  // Fetch the live plan catalogue once on startup.
   useEffect(() => { dispatch(loadPlans()) }, [dispatch])
+
+  // If sync is configured, load from Gist on mount
+  const syncGistId = useSelector(s => s.sync.gistId)
+  useEffect(() => {
+    if (syncGistId) dispatch(loadFromGist())
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app-shell">

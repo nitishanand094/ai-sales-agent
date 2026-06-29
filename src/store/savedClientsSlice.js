@@ -37,8 +37,9 @@ const savedClientsSlice = createSlice({
       state.items = state.items.filter(c => c.id !== action.payload)
     },
     clearSavedClients: (state) => { state.items = [] },
+    setItems: (state, action) => { state.items = action.payload },
   },
 })
 
-export const { upsertClient, deleteClient, clearSavedClients } = savedClientsSlice.actions
+export const { upsertClient, deleteClient, clearSavedClients, setItems: setSavedClientItems } = savedClientsSlice.actions
 export default savedClientsSlice.reducer
