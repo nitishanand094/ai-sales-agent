@@ -48,9 +48,17 @@ export default function Sidebar() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <svg className="sidebar-logo-icon" viewBox="0 0 24 24" width="32" height="32" fill="none"
-            stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V7L12 2z" />
-            <polyline points="9 12 11 14 15 10" />
+            stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+            {/* Shield — insurance */}
+            <path strokeWidth="1.6" d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V7L12 2z" />
+            {/* Neural network connections — AI */}
+            <line strokeWidth="1.1" x1="11.4" y1="9.6" x2="9.6" y2="12.9" />
+            <line strokeWidth="1.1" x1="12.6" y1="9.6" x2="14.4" y2="12.9" />
+            <line strokeWidth="1.1" x1="10.3" y1="14" x2="13.7" y2="14" />
+            {/* Nodes */}
+            <circle cx="12" cy="8.5" r="1.3" fill="currentColor" stroke="none" />
+            <circle cx="9" cy="14" r="1.3" fill="currentColor" stroke="none" />
+            <circle cx="15" cy="14" r="1.3" fill="currentColor" stroke="none" />
           </svg>
           <div>
             <div className="sidebar-org">Advisor Portal</div>
