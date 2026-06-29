@@ -34,11 +34,8 @@ export default function App() {
 
   useEffect(() => { dispatch(loadPlans()) }, [dispatch])
 
-  // If sync is configured, load from Gist on mount
-  const syncGistId = useSelector(s => s.sync.gistId)
-  useEffect(() => {
-    if (syncGistId) dispatch(loadFromGist())
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Always load from shared Gist on mount
+  useEffect(() => { dispatch(loadFromGist()) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app-shell">

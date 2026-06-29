@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { fetchGist, patchGist } from '../engine/gistSync'
 import { setHistoryItems } from './historySlice'
 import { setSavedClientItems } from './savedClientsSlice'
+import { SHARED_GIST_ID } from '../config'
 
 export const SYNC_CONFIG_KEY = 'ch_sync_config'
 
@@ -19,7 +20,8 @@ function mergeById(gistItems = [], localItems = []) {
 
 export const loadFromGist = createAsyncThunk('sync/load', async (_, { getState, dispatch }) => {
   const { gistId, pat } = getState().sync
-  const data = await fetchGist(gistId, pat)
+  const readId = gistId || SHARED_GIST_ID  // always read from shared Gist even without setup
+  const data = await fetchGist(readId, pat)
 
   const mergedHistory = mergeById(data.history || [], getState().history.items).slice(0, 100)
   const mergedClients = mergeById(data.savedClients || [], getState().savedClients.items)
@@ -27,8 +29,10 @@ export const loadFromGist = createAsyncThunk('sync/load', async (_, { getState, 
   dispatch(setHistoryItems(mergedHistory))
   dispatch(setSavedClientItems(mergedClients))
 
-  // Write merged result back so any local-only items are preserved in Gist
-  await patchGist(gistId, pat, { history: mergedHistory, savedClients: mergedClients })
+  // Only write back if PAT is available (owner's device)
+  if (pat) {
+    await patchGist(readId, pat, { history: mergedHistory, savedClients: mergedClients })
+  }
 
   return { historyCount: mergedHistory.length, clientsCount: mergedClients.length }
 })
